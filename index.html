@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GUERRERO 63KM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; background: #222; overflow: hidden; font-family: monospace; }
+        canvas { display: block; background: #228b22; margin: auto; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 18px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">KM: <span id="dist">0</span> | HP: <span id="hp">100</span> | $: <span id="oro">1000</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let dist = 0, hp = 100, oro = 1000;
+        let pjY = canvas.height / 2;
+        
+        // Joystick ficticio para web
+        let joyX = 120, joyY = canvas.height - 120, isPressing = false;
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Suelo (Verde)
+            ctx.fillStyle = "#228b22";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Personaje (Círculo azul por ahora)
+            ctx.fillStyle = "blue";
+            ctx.beginPath();
+            ctx.arc(200, pjY, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Interfaz de Joystick
+            ctx.fillStyle = "rgba(255,255,255,0.2)";
+            ctx.beginPath();
+            ctx.arc(joyX, joyY, 60, 0, Math.PI * 2);
+            ctx.fill();
+
+            requestAnimationFrame(draw);
+        }
+
+        canvas.addEventListener("touchstart", (e) => { isPressing = true; });
+        canvas.addEventListener("touchmove", (e) => {
+            if(isPressing) {
+                let touch = e.touches[0];
+                pjY = touch.clientY;
+                dist += 5;
+                document.getElementById("dist").innerText = (dist/1000).toFixed(1);
+            }
+        });
+        canvas.addEventListener("touchend", () => { isPressing = false; });
+
+        draw();
+    </script>
+</body>
+</html>
