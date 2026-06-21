@@ -2,9 +2,15 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GUERRERO 63KM: CHULUPI EDITION</title>
     <style>
+        * {
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
         body {
             margin: 0;
             padding: 0;
@@ -13,16 +19,17 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            width: 100vw;
             font-family: monospace;
             overflow: hidden;
-            user-select: none;
-            touch-action: none; /* Evita que el celular haga zoom o rebote al jugar */
+            touch-action: none;
         }
         canvas {
             background-color: #87ceeb;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             max-width: 100%;
             max-height: 100%;
+            aspect-ratio: 1000 / 700;
         }
     </style>
 </head>
@@ -56,12 +63,11 @@ let enSuelo = false;
 const pjAncho = 55;
 const pjAlto = 75;
 
-// Inventario (Hotbar de 9 slots y Mochila)
+// Inventario
 let hb = ["Espada Madera", "Pico Madera", "Caña de Pescar", "Arco", null, null, null, null, null];
 let mochila = ["Flecha", "Flecha", "Flecha", "Poción Vida", "Poción Vida"];
 let proyectiles = [];
 
-// --- DICCIONARIOS DE CONFIGURACIÓN ---
 const INFO_ITEMS = {
     "Espada Madera": { dmg: 60, ico: "⚔️", tipo: "arma" },
     "Pico Madera": { dmg: 30, ico: "⛏️", tipo: "pico" },
@@ -76,27 +82,32 @@ const INFO_ITEMS = {
 const ENEMIGOS_ICOS = { "ogro": "👹", "flechero": "🏹", "ladron": "🥷", "chulupi": "🪳" };
 
 // --- BOTONES TÁCTILES ---
-const Y_BOTONES = 700 - 90;
-const btnIzq = { x: 30, y: Y_BOTONES, w: 80, h: 70, txt: "◀" };
-const btnDer = { x: 130, y: Y_BOTONES, w: 80, h: 70, txt: "▶" };
-const btnSalto = { x: 230, y: Y_BOTONES, w: 80, h: 70, txt: "▲" };
-const btnAtacr = { x: 1000 - 130, y: Y_BOTONES, w: 100, h: 70, txt: "ATK" };
-const btnInv = { x: 20, y: 100, w: 70, h: 70, txt: "🎒" };
+const Y_BOTONES = 700 - 110;
+const btnIzq = { x: 30, y: Y_BOTONES, w: 90, h: 80, txt: "◀" };
+const btnDer = { x: 140, y: Y_BOTONES, w: 90, h: 80, txt: "▶" };
+const btnSalto = { x: 250, y: Y_BOTONES, w: 90, h: 80, txt: "▲" };
+const btnAtacr = { x: 1000 - 140, y: Y_BOTONES, w: 110, h: 80, txt: "ATK" };
+const btnInv = { x: 20, y: 100, w: 80, h: 80, txt: "🎒" };
 
-// Estado del teclado
+// Botones de Menú Principal
+const btnMenuJugar = { x: 400, y: 300, w: 200, h: 60, txt: "JUGAR" };
+const btnMenuControles = { x: 400, y: 400, w: 200, h: 60, txt: "CONTROLES" };
+const btnMochilaVolver = { x: 450, y: 550, w: 100, h: 60, txt: "VOLVER" };
+
+// Estado de Teclado y Toques activos (Multitouch)
 const teclas = {};
+let toquesActivos = []; 
 
 // --- MAPA DE BLOQUES ---
 const MAPA_ESTRUCTURA = [
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Capa superior (Pasto)
-    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], // Tierra
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], 
+    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2], 
     [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]
 ];
 
-// --- GENERACIÓN DEL MUNDO ---
 let entorno = []; let enemigos = []; let lagos = []; let vendedores = [];
 
 function lanzarAviso(msg) { avisoTxt = { t: msg, frames: 90 }; }
@@ -119,65 +130,92 @@ function iniciarMundo() {
     }
 }
 
-// --- CONTROLES DE MOUSE / TÁCTIL (MÓVIL CORREGIDO) ---
-let mouseX = 0, mouseY = 0, clicActivo = false;
+// --- FÓRMULA MÁGICA: Convertir coordenadas de pantalla a coordenadas internas (1000x700) ---
+function obtenerPuntoVirtual(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left) * (canvas.width / rect.width);
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    return { x, y };
+}
 
+function verificarColision(punto, btn) {
+    return punto.x >= btn.x && punto.x <= btn.x + btn.w && punto.y >= btn.y && punto.y <= btn.y + btn.h;
+}
+
+// --- CONTROL DE EVENTOS ---
 window.addEventListener('keydown', (e) => { teclas[e.key.toLowerCase()] = true; });
 window.addEventListener('keyup', (e) => { teclas[e.key.toLowerCase()] = false; });
 
-function actualizarCoordenadas(clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = (clientX - rect.left) * (canvas.width / rect.width);
-    mouseY = (clientY - rect.top) * (canvas.height / rect.height);
+// Manejo unificado de Toques de Celular (Soporta múltiples dedos)
+function actualizarToquesCelular(e) {
+    toquesActivos = [];
+    for (let i = 0; i < e.touches.length; i++) {
+        toquesActivos.push(obtenerPuntoVirtual(e.touches[i].clientX, e.touches[i].clientY));
+    }
 }
-
-canvas.addEventListener('mousemove', (e) => { actualizarCoordenadas(e.clientX, e.clientY); });
-canvas.addEventListener('mousedown', (e) => {
-    clicActivo = true;
-    actualizarCoordenadas(e.clientX, e.clientY);
-    procesarClics();
-});
-canvas.addEventListener('mouseup', () => { clicActivo = false; });
 
 canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length > 0) {
-        clicActivo = true;
-        actualizarCoordenadas(e.touches[0].clientX, e.touches[0].clientY);
-        procesarClics();
-    }
-}, { passive: true });
+    e.preventDefault();
+    actualizarToquesCelular(e);
+    
+    // Evaluar acciones inmediatas al tocar la pantalla
+    toquesActivos.forEach(punto => {
+        if (estado === "MENU_PRINCIPAL") {
+            if (verificarColision(punto, btnMenuJugar)) { iniciarMundo(); estado = "JUEGO"; }
+            if (verificarColision(punto, btnMenuControles)) { controlTactil = !controlTactil; }
+        }
+        else if (estado === "MOCHILA") {
+            if (verificarColision(punto, btnMochilaVolver)) { estado = "JUEGO"; }
+        }
+        else if (estado === "JUEGO") {
+            // Cambio de slot en Hotbar
+            for (let i = 0; i < 9; i++) {
+                let rx = 230 + i * 65;
+                if (punto.x >= rx && punto.x <= rx + 60 && punto.y >= 530 && punto.y <= 590) { slotSel = i; }
+            }
+            if (controlTactil && verificarColision(punto, btnInv)) { estado = "MOCHILA"; }
+        }
+    });
+}, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
-    if (e.touches.length > 0) {
-        actualizarCoordenadas(e.touches[0].clientX, e.touches[0].clientY);
-    }
-}, { passive: true });
+    e.preventDefault();
+    actualizarToquesCelular(e);
+}, { passive: false });
 
-canvas.addEventListener('touchend', () => { clicActivo = false; });
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    actualizarToquesCelular(e);
+}, { passive: false });
 
-function colisionBoton(btn) {
-    return mouseX >= btn.x && mouseX <= btn.x + btn.w && mouseY >= btn.y && mouseY <= btn.y + btn.h;
-}
 
-function procesarClics() {
+// Soporte básico para Mouse (Computadora) por si acaso
+canvas.addEventListener('mousedown', (e) => {
+    const punto = obtenerPuntoVirtual(e.clientX, e.clientY);
+    toquesActivos = [punto];
+
     if (estado === "MENU_PRINCIPAL") {
-        if (mouseX > 400 && mouseX < 600 && mouseY > 300 && mouseY < 360) { iniciarMundo(); estado = "JUEGO"; }
-        if (mouseX > 400 && mouseX < 600 && mouseY > 400 && mouseY < 460) { controlTactil = !controlTactil; }
+        if (verificarColision(punto, btnMenuJugar)) { iniciarMundo(); estado = "JUEGO"; }
+        if (verificarColision(punto, btnMenuControles)) { controlTactil = !controlTactil; }
     }
     else if (estado === "MOCHILA") {
-        if (mouseX > 450 && mouseX < 550 && mouseY > 550 && mouseY < 610) { estado = "JUEGO"; }
+        if (verificarColision(punto, btnMochilaVolver)) { estado = "JUEGO"; }
     }
     else if (estado === "JUEGO") {
         for (let i = 0; i < 9; i++) {
             let rx = 230 + i * 65;
-            if (mouseX >= rx && mouseX <= rx + 60 && mouseY >= 530 && mouseY <= 590) { slotSel = i; }
+            if (punto.x >= rx && punto.x <= rx + 60 && punto.y >= 530 && punto.y <= 590) { slotSel = i; }
         }
-        if (controlTactil && colisionBoton(btnInv)) { estado = "MOCHILA"; }
+        if (controlTactil && verificarColision(punto, btnInv)) { estado = "MOCHILA"; }
     }
-}
+});
 
+canvas.addEventListener('mouseup', () => { toquesActivos = []; });
+
+// --- RENDERIZADO DE BOTONES ---
 function dibujarBoton(btn, color) {
-    ctx.fillStyle = (clicActivo && colisionBoton(btn)) ? "#666" : color;
+    let presionado = toquesActivos.some(p => verificarColision(p, btn));
+    ctx.fillStyle = presionado ? "#666" : color;
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#fff";
@@ -185,7 +223,8 @@ function dibujarBoton(btn, color) {
     ctx.fillStyle = "#fff";
     ctx.font = "bold 18px monospace";
     ctx.textAlign = "center";
-    ctx.fillText(btn.txt, btn.x + btn.w/2, btn.y + btn.h/2 + 6);
+    ctx.textBaseline = "middle";
+    ctx.fillText(btn.txt, btn.x + btn.w/2, btn.y + btn.h/2);
 }
 
 // --- BUCLE PRINCIPAL ---
@@ -201,17 +240,28 @@ function actualizar() {
     velX = 0;
     let ejecutarAtaque = false;
 
-    if (controlTactil && clicActivo) {
-        if (colisionBoton(btnIzq)) velX = -6;
-        if (colisionBoton(btnDer)) velX = 6;
-        if (colisionBoton(btnSalto) && enSuelo) { velY = -13; enSuelo = false; }
-        if (colisionBoton(btnAtacr)) { ejecutarAtaque = true; clicActivo = false; } 
-    } else {
-        if (teclas['a'] || teclas['arrowleft']) velX = -6;
-        if (teclas['d'] || teclas['arrowright']) velX = 6;
-        if ((teclas[' '] || teclas['w'] || teclas['arrowup']) && enSuelo) { velY = -13; enSuelo = false; }
-        if (teclas['f']) { ejecutarAtaque = true; teclas['f'] = false; }
-    }
+    // Detectar botones presionados en el arreglo de toques multitouch
+    let tocandoIzq = toquesActivos.some(p => verificarColision(p, btnIzq));
+    let tocandoDer = toquesActivos.some(p => verificarColision(p, btnDer));
+    let tocandoSalto = toquesActivos.some(p => verificarColision(p, btnSalto));
+    let tocandoAtk = toquesActivos.some(p => verificarColision(p, btnAtacr));
+
+    if (controlTactil) {
+        if (tocandoIzq) velX = -6;
+        if (tocandoDer) velX = 6;
+        if (tocandoSalto && enSuelo) { velY = -13; enSuelo = false; }
+        if (tocandoAtk) { 
+            ejecutarAtaque = true; 
+            // Eliminamos el toque de ataque para que no ataque infinitamente en ráfaga
+            toquesActivos = toquesActivos.filter(p => !verificarColision(p, btnAtacr));
+        } 
+    } 
+    
+    // Controles por teclado alternativos
+    if (teclas['a'] || teclas['arrowleft']) velX = -6;
+    if (teclas['d'] || teclas['arrowright']) velX = 6;
+    if ((teclas[' '] || teclas['w'] || teclas['arrowup']) && enSuelo) { velY = -13; enSuelo = false; }
+    if (teclas['f']) { ejecutarAtaque = true; teclas['f'] = false; }
 
     velY += GRAVEDAD;
     if (velY > 14) velY = 14;
@@ -298,15 +348,13 @@ function renderizar() {
         ctx.fillStyle = "#ffd700";
         ctx.font = "bold 50px serif";
         ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
         ctx.fillText("GUERRERO 63KM", canvas.width/2, 180);
         ctx.font = "bold 20px monospace";
         ctx.fillText("CHULUPI EDITION (LostMiner Style)", canvas.width/2, 220);
 
-        ctx.fillStyle = "#327832"; ctx.fillRect(400, 300, 200, 60);
-        ctx.fillStyle = "#555"; ctx.fillRect(400, 400, 200, 60);
-        ctx.fillStyle = "#fff"; textBaseline = "middle";
-        ctx.fillText("JUGAR", 500, 338);
-        ctx.fillText("CONTROLES: " + (controlTactil ? "TACTIL" : "TECLADO"), 500, 438);
+        dibujarBoton(btnMenuJugar, "#327832");
+        dibujarBoton(btnMenuControles, "#555");
     }
     else if (estado === "MOCHILA") {
         ctx.fillStyle = "#1e1e28";
@@ -323,8 +371,7 @@ function renderizar() {
                 ctx.fillText(INFO_ITEMS[mochila[i]]?.ico || "?", x + 55, y + 42);
             }
         }
-        ctx.fillStyle = "#963232"; ctx.fillRect(450, 550, 100, 60);
-        ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText("VOLVER", 500, 588);
+        dibujarBoton(btnMochilaVolver, "#963232");
     }
     else if (estado === "JUEGO") {
         ctx.fillStyle = "#87ceeb"; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -345,15 +392,16 @@ function renderizar() {
             ctx.fillStyle = "#1d5fad"; ctx.fillRect(lx, l.y, 400, 180);
         });
 
+        ctx.textAlign = "center";
         entorno.forEach(o => {
             let ox = o.x - distRec + pjX;
-            ctx.font = "40px monospace"; ctx.textAlign = "center";
+            ctx.font = "40px monospace"; 
             ctx.fillText(o.t, ox, o.y);
         });
 
         vendedores.forEach(v => {
             let vx = v.x - distRec + pjX;
-            ctx.font = "50px monospace"; ctx.textAlign = "center";
+            ctx.font = "50px monospace"; 
             ctx.fillText("🧙‍♂️", vx, v.y);
         });
 
@@ -363,13 +411,13 @@ function renderizar() {
         enemigos.forEach(e => {
             if (!e.v) return;
             let ex = e.x - distRec + pjX;
-            ctx.font = "45px monospace"; ctx.textAlign = "center";
+            ctx.font = "45px monospace"; 
             ctx.fillText(ENEMIGOS_ICOS[e.t], ex, e.y);
             ctx.fillStyle = "red"; ctx.fillRect(ex - 25, e.y - 50, 50, 6);
             ctx.fillStyle = "green"; ctx.fillRect(ex - 25, e.y - 50, (e.hp / 150) * 50, 6);
         });
 
-        ctx.font = "60px monospace"; ctx.textAlign = "center";
+        ctx.font = "60px monospace"; 
         ctx.fillText("🤠", pjX, pjY + 50);
 
         // HUD superior
