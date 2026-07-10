@@ -473,6 +473,206 @@ function renderizar() {
     }
 
     if (avisoTxt.frames > 0) {
+        ctx.fillStyle = "rse)) ejecutarRegistro();
+    }
+    else if (estado === "MENU_PRINCIPAL") {
+        if (verificarColision(punto, btnMenuJugar)) { iniciarMundo(); estado = "JUEGO"; }
+        if (verificarColision(punto, btnMenuControles)) { controlTactil = !controlTactil; }
+    }
+    else if (estado === "MOCHILA") {
+        if (verificarColision(punto, btnMochilaVolver)) { estado = "JUEGO"; }
+    }
+    else if (estado === "JUEGO") {
+        for (let i = 0; i < 9; i++) {
+            let rx = 230 + i * 65;
+            if (punto.x >= rx && punto.x <= rx + 60 && punto.y >= 530 && punto.y <= 590) { slotSel = i; }
+        }
+        if (controlTactil && verificarColision(punto, btnInv)) { estado = "MOCHILA"; }
+    }
+});
+canvas.addEventListener('mouseup', () => { toquesActivos = []; });
+
+function dibujarBoton(btn, color) {
+    let presionado = toquesActivos.some(p => verificarColision(p, btn));
+    ctx.fillStyle = presionado ? "#666" : color;
+    ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+    ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(btn.txt, btn.x + btn.w/2, btn.y + btn.h/2);
+}
+
+function bucle() { actualizar(); renderizar(); requestAnimationFrame(bucle); }
+
+function actualizar() {
+    if (estado !== "JUEGO") return;
+
+    velX = 0; let ejecutarAtaque = false;
+    let tocandoIzq = toquesActivos.some(p => verificarColision(p, btnIzq));
+    let tocandoDer = toquesActivos.some(p => verificarColision(p, btnDer));
+    let tocandoSalto = toquesActivos.some(p => verificarColision(p, btnSalto));
+    let tocandoAtk = toquesActivos.some(p => verificarColision(p, btnAtacr));
+
+    if (controlTactil) {
+        if (tocandoIzq) velX = -6;
+        if (tocandoDer) velX = 6;
+        if (tocandoSalto && enSuelo) { velY = -13; enSuelo = false; }
+        if (tocandoAtk) { ejecutarAtaque = true; toquesActivos = toquesActivos.filter(p => !verificarColision(p, btnAtacr)); } 
+    } 
+    
+    if (teclas['a'] || teclas['arrowleft']) velX = -6;
+    if (teclas['d'] || teclas['arrowright']) velX = 6;
+    if ((teclas[' '] || teclas['w'] || teclas['arrowup']) && enSuelo) { velY = -13; enSuelo = false; }
+    if (teclas['f']) { ejecutarAtaque = true; teclas['f'] = false; }
+
+    velY += GRAVEDAD; if (velY > 14) velY = 14;
+    distRec += velX; if (distRec < 0) distRec = 0;
+    pjY += velY;
+
+    if (pjY >= ALTURA_SUELO - pjAlto) { pjY = ALTURA_SUELO - pjAlto; velY = 0; enSuelo = true; }
+
+    if (ejecutarAtaque) {
+        let item = hb[slotSel]; let inf = INFO_ITEMS[item] || {};
+        if (item === "Arco") {
+            let idxFlecha = mochila.indexOf("Flecha");
+            if (idxFlecha !== -1) { proyectiles.push({ x: pjX + 40, y: pjY + 30, v: 15 }); mochila.splice(idxFlecha, 1); } 
+            else { lanzarAviso("¡SIN FLECHAS!"); }
+        }
+        else if (inf.heal) { hp = Math.min(100, hp + inf.heal); hb[slotSel] = null; lanzarAviso("¡CURADO!"); }
+        else if (item === "Caña de Pescar") {
+            let cercaLago = lagos.some(l => Math.abs((l.x - distRec + pjX) - pjX) < 150);
+            if (cercaLago) { let pez = Math.random() < 0.7 ? "Pez" : "Piraña"; mochila.push(pez); lanzarAviso("¡PESCASTE UN " + pez.toUpperCase() + "!"); } 
+            else { lanzarAviso("NO HAY AGUA CERCA"); }
+        }
+        else {
+            let daño = inf.dmg || 15;
+            enemigos.forEach(e => {
+                let ex = e.x - distRec + pjX;
+                if (e.v && Math.abs(ex - pjX) < 90) { e.hp -= daño; lanzarAviso("¡GOLPE! -" + daño); if (e.hp <= 0) { e.v = false; oro += 100; } }
+            });
+        }
+    }
+
+    proyectiles.forEach((p, index) => {
+        p.x += p.v; if (p.x > 1000) proyectiles.splice(index, 1);
+        enemigos.forEach(e => {
+            let ex = e.x - distRec + pjX;
+            if (e.v && Math.abs(ex - p.x) < 40) { e.hp -= 150; e.v = e.hp <= 0; if (!e.v) oro += 100; proyectiles.splice(index, 1); lanzarAviso("¡CRÍTICO CON ARCO!"); }
+        });
+    });
+
+    enemigos.forEach(e => {
+        let ex = e.x - distRec + pjX;
+        if (e.v && Math.abs(pjX - ex) < 40 && Math.abs(pjY - e.y) < 50) {
+            hp -= 0.4; 
+            if (hp <= 0) { 
+                guardarProgresoServidor(); 
+                lanzarAviso("¡HAS MUERTO! PROGRESO GUARDADO"); 
+                estado = "MENU_PRINCIPAL"; 
+            }
+        }
+    });
+
+    if (avisoTxt.frames > 0) avisoTxt.frames--;
+}
+
+function renderizar() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (estado === "LOGIN") {
+        ctx.fillStyle = "#14141e"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffd700"; ctx.font = "bold 45px serif"; ctx.textAlign = "center";
+        ctx.fillText("GUERRERO 63KM", canvas.width/2, 160);
+        ctx.fillStyle = "#fff"; ctx.font = "16px monospace";
+        ctx.fillText("Inicia sesión para proteger tu inventario, oro y récords globales", canvas.width/2, 220);
+
+        dibujarBoton(btnIniciarSesion, "#325c87");
+        dibujarBoton(btnRegistrarse, "#327832");
+    }
+    else if (estado === "MENU_PRINCIPAL") {
+        ctx.fillStyle = "#14141e"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffd700"; ctx.font = "bold 50px serif"; ctx.textAlign = "center";
+        ctx.fillText("GUERRERO 63KM", canvas.width/2, 120);
+        
+        ctx.fillStyle = "#777"; ctx.font = "14px monospace";
+        ctx.fillText(`Conectado como: ${usuarioActual ? usuarioActual.email.split('@')[0] : "Anónimo"}`, canvas.width/2, 160);
+        ctx.fillStyle = "#5cbe7a";
+        ctx.fillText(`Tu récord histórico guardado: ${maxDistGlobal} m`, canvas.width/2, 195);
+
+        // Panel de Líderes Globales
+        ctx.fillStyle = "rgba(255, 255, 255, 0.04)"; ctx.fillRect(660, 240, 290, 280);
+        ctx.strokeStyle = "#ffd700"; ctx.strokeRect(660, 240, 290, 280);
+        ctx.fillStyle = "#ffd700"; ctx.font = "bold 16px monospace";
+        ctx.fillText("🏆 TOP 5 MUNDIAL", 805, 275);
+
+        ctx.fillStyle = "#fff"; ctx.font = "14px monospace";
+        listaTops.forEach((jugador, i) => {
+            ctx.textAlign = "left"; ctx.fillText(`${i + 1}. ${jugador.nombre}`, 680, 320 + (i * 35));
+            ctx.textAlign = "right"; ctx.fillText(`${jugador.metros}m`, 930, 320 + (i * 35));
+        });
+
+        dibujarBoton(btnMenuJugar, "#327832");
+        dibujarBoton(btnMenuControles, "#555");
+    }
+    else if (estado === "MOCHILA") {
+        ctx.fillStyle = "#1e1e28"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff"; ctx.font = "24px monospace"; ctx.textAlign = "left";
+        ctx.fillText("🎒 MOCHILA (PROGRESS SAVED)", 100, 80);
+
+        for(let i=0; i<24; i++) {
+            let x = 100 + (i % 6) * 140; let y = 130 + Math.floor(i / 6) * 90;
+            ctx.fillStyle = "#333"; ctx.fillRect(x, y, 110, 70); ctx.strokeStyle = "#777"; ctx.strokeRect(x, y, 110, 70);
+            if(mochila[i]) { ctx.font = "25px monospace"; ctx.textAlign = "center"; ctx.fillText(INFO_ITEMS[mochila[i]]?.ico || "?", x + 55, y + 42); }
+        }
+        dibujarBoton(btnMochilaVolver, "#963232");
+    }
+    else if (estado === "JUEGO") {
+        ctx.fillStyle = "#87ceeb"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        let offsetBloques = distRec % TAMANIO_BLOQUE;
+        for (let f = 0; f < MAPA_ESTRUCTURA.length; f++) {
+            for (let c = 0; c < (canvas.width / TAMANIO_BLOQUE) + 2; c++) {
+                let bx = c * TAMANIO_BLOQUE - offsetBloques; let by = f * TAMANIO_BLOQUE + 450;
+                ctx.fillStyle = (f === 0) ? "#5c9e32" : "#6e5039"; ctx.fillRect(bx, by, TAMANIO_BLOQUE, TAMANIO_BLOQUE);
+                ctx.strokeStyle = "#4d3322"; ctx.strokeRect(bx, by, TAMANIO_BLOQUE, TAMANIO_BLOQUE);
+            }
+        }
+        lagos.forEach(l => { let lx = l.x - distRec + pjX; ctx.fillStyle = "#1d5fad"; ctx.fillRect(lx, l.y, 400, 180); });
+        ctx.textAlign = "center";
+        entorno.forEach(o => { let ox = o.x - distRec + pjX; ctx.font = "40px monospace"; ctx.fillText(o.t, ox, o.y); });
+        vendedores.forEach(v => { let vx = v.x - distRec + pjX; ctx.font = "50px monospace"; ctx.fillText("🪙", vx, v.y); });
+        ctx.fillStyle = "#ff8c00"; proyectiles.forEach(p => { ctx.fillRect(p.x, p.y, 20, 5); });
+
+        enemigos.forEach(e => {
+            if (!e.v) return;
+            let ex = e.x - distRec + pjX; ctx.font = "45px monospace"; ctx.fillText(ENEMIGOS_ICOS[e.t], ex, e.y);
+            ctx.fillStyle = "red"; ctx.fillRect(ex - 25, e.y - 50, 50, 6);
+            ctx.fillStyle = "green"; ctx.fillRect(ex - 25, e.y - 50, (e.hp / 150) * 50, 6);
+        });
+
+        ctx.font = "60px monospace"; ctx.fillText("🤠", pjX, pjY + 50);
+
+        // HUD superior
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)"; ctx.fillRect(10, 10, 300, 80);
+        ctx.fillStyle = "#fff"; ctx.font = "bold 13px monospace"; ctx.textAlign = "left";
+        ctx.fillText(`💰 ORO PARTIDA: ${oro}`, 20, 30);
+        ctx.fillText(`🏁 DISTANCIA: ${Math.floor(distRec / 10)} m`, 20, 50);
+        ctx.fillStyle = "red"; ctx.fillRect(20, 65, 200, 10);
+        ctx.fillStyle = "#00ff00"; ctx.fillRect(20, 65, hp * 2, 10);
+
+        // Hotbar Inferior
+        for (let i = 0; i < 9; i++) {
+            let rx = 230 + i * 65;
+            ctx.fillStyle = (i === slotSel) ? "#555" : "rgba(0,0,0,0.6)"; ctx.fillRect(rx, 530, 60, 60);
+            ctx.strokeStyle = (i === slotSel) ? "#ffd700" : "#fff"; ctx.lineWidth = (i === slotSel) ? 3 : 1; ctx.strokeRect(rx, 530, 60, 60);
+            if (hb[i]) { ctx.font = "24px monospace"; ctx.textAlign = "center"; ctx.fillText(INFO_ITEMS[hb[i]]?.ico || "", rx + 30, 568); }
+        }
+
+        if (controlTactil) {
+            dibujarBoton(btnIzq, "#444"); dibujarBoton(btnDer, "#444");
+            dibujarBoton(btnSalto, "#444"); dibujarBoton(btnAtacr, "#a83232"); dibujarBoton(btnInv, "#444");
+        }
+    }
+
+    if (avisoTxt.frames > 0) {
         ctx.fillStyle = "
 <canvas id="pantalla" width="1000" height="700"></canvas>
 
