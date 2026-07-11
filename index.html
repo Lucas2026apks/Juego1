@@ -141,8 +141,7 @@ let toquesActivos = [];
 let entorno = []; let enemigos = []; let lagos = []; let vendedores = [];
 
 function lanzarAviso(msg) { avisoTxt = { t: msg, frames: 120 }; }
-
-// --- AUTENTICACIÓN Y GUARDADO ---
+    // --- AUTENTICACIÓN Y GUARDADO ---
 function ejecutarLogin() {
     if(!auth) { fallbackOffline("Iniciar Sesión"); return; }
     let email = prompt("Introduce tu Usuario / Email:");
