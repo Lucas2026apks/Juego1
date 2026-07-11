@@ -128,6 +128,7 @@ const btnDer = { x: 140, y: Y_BOTONES, w: 90, h: 80, txt: "▶" };
 const btnSalto = { x: 250, y: Y_BOTONES, w: 90, h: 80, txt: "▲" };
 const btnAtacr = { x: 1000 - 140, y: Y_BOTONES, w: 110, h: 80, txt: "ATK" };
 const btnInv = { x: 20, y: 100, w: 80, h: 80, txt: "🎒" };
+const btnSalir = { x: 20, y: 20, w: 120, h: 50, txt: "🚪 SALIR" };
 
 const btnIniciarSesion = { x: 400, y: 300, w: 200, h: 50, txt: "INICIAR SESIÓN" };
 const btnRegistrarse = { x: 400, y: 380, w: 200, h: 50, txt: "REGISTRARSE" };
@@ -141,7 +142,8 @@ let toquesActivos = [];
 let entorno = []; let enemigos = []; let lagos = []; let vendedores = [];
 
 function lanzarAviso(msg) { avisoTxt = { t: msg, frames: 120 }; }
-    // --- AUTENTICACIÓN Y GUARDADO ---
+
+// --- AUTENTICACIÓN Y GUARDADO ---
 function ejecutarLogin() {
     if(!auth) { fallbackOffline("Iniciar Sesión"); return; }
     let email = prompt("Introduce tu Usuario / Email:");
@@ -186,20 +188,30 @@ function fallbackOffline(accion) {
 function guardarProgresoServidor() {
     if (!usuarioActual || !database) return;
     
+    let nombreUsuario = usuarioActual.email.split('@')[0];
+    let distActualMetros = Math.floor(distRec / 10);
+
     database.ref('usuarios/' + usuarioActual.uid).set({
-        nombre: usuarioActual.email.split('@')[0],
+        nombre: nombreUsuario,
         oro: oro,
-        maxDistancia: maxDistGlobal,
+        maxDistancia: Math.max(maxDistGlobal, distActualMetros),
         mochila: mochila,
         hotbar: hb
     });
 
-    let distActualMetros = Math.floor(distRec / 10);
     if (distActualMetros > maxDistGlobal) {
         maxDistGlobal = distActualMetros;
         database.ref('scores/' + usuarioActual.uid).set({
-            nombre: usuarioActual.email.split('@')[0],
+            nombre: nombreUsuario,
             metros: maxDistGlobal
+        }).then(() => {
+            database.ref('scores').orderByChild('metros').limitToLast(5).once('value', (snapshot) => {
+                let lista = [];
+                snapshot.forEach((childSnapshot) => {
+                    lista.push(childSnapshot.val());
+                });
+                if(lista.length > 0) listaTops = lista.reverse();
+            });
         });
     }
 }
@@ -277,6 +289,11 @@ canvas.addEventListener('touchstart', (e) => {
                 if (punto.x >= rx && punto.x <= rx + 60 && punto.y >= 530 && punto.y <= 590) { slotSel = i; }
             }
             if (controlTactil && verificarColision(punto, btnInv)) { estado = "MOCHILA"; }
+            if (verificarColision(punto, btnSalir)) {
+                guardarProgresoServidor();
+                lanzarAviso("¡PROGRESO GUARDADO!");
+                estado = "MENU_PRINCIPAL";
+            }
         }
     });
 }, { passive: false });
@@ -304,6 +321,11 @@ canvas.addEventListener('mousedown', (e) => {
             if (punto.x >= rx && punto.x <= rx + 60 && punto.y >= 530 && punto.y <= 590) { slotSel = i; }
         }
         if (controlTactil && verificarColision(punto, btnInv)) { estado = "MOCHILA"; }
+        if (verificarColision(punto, btnSalir)) {
+            guardarProgresoServidor();
+            lanzarAviso("¡PROGRESO GUARDADO!");
+            estado = "MENU_PRINCIPAL";
+        }
     }
 });
 canvas.addEventListener('mouseup', () => { toquesActivos = []; });
@@ -313,7 +335,7 @@ function dibujarBoton(btn, color) {
     ctx.fillStyle = presionado ? "#666" : color;
     ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
     ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.fillStyle = "#fff"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(btn.txt, btn.x + btn.w/2, btn.y + btn.h/2);
 }
 
@@ -483,6 +505,8 @@ function renderizar() {
             dibujarBoton(btnIzq, "#444"); dibujarBoton(btnDer, "#444");
             dibujarBoton(btnSalto, "#444"); dibujarBoton(btnAtacr, "#a83232"); dibujarBoton(btnInv, "#444");
         }
+        
+        dibujarBoton(btnSalir, "#963232");
     }
 
     if (avisoTxt.frames > 0) {
